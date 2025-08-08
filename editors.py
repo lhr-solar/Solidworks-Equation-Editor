@@ -46,8 +46,11 @@ class ExpressionEditor(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(4)
 
-        # Row 1: expression line
-        self.edit = QLineEdit(initial_text)
+        # Row 1: expression line - use QPlainTextEdit for highlighting support
+        self.edit = QPlainTextEdit()
+        self.edit.setMaximumHeight(60)  # Keep it compact like a line edit
+        self.edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.edit.setPlainText(initial_text)
         outer.addWidget(self.edit, 1)
 
         # Row 2: insertion controls
@@ -76,11 +79,8 @@ class ExpressionEditor(QWidget):
         # Initial fill of item combo
         self._refresh_item_combo()
 
-        # Mirror into a QTextDocument for syntax highlighting
-        self._doc = QTextDocument(self)
-        self._doc.setPlainText(self.edit.text())
-        self._highlighter = ExpressionHighlighter(self._doc, self.get_known_names)
-        self.edit.textChanged.connect(self._doc.setPlainText)
+        # Set up syntax highlighting directly on the QPlainTextEdit
+        self._highlighter = ExpressionHighlighter(self.edit.document(), self.get_known_names)
 
     def _refresh_item_combo(self):
         cat = self.category_combo.currentText()
@@ -123,27 +123,20 @@ class ExpressionEditor(QWidget):
             token = val
 
         # Insert at cursor
-        edit = self.edit
-        pos = edit.cursorPosition()
-        t = edit.text()
-        new_t = t[:pos] + token + t[pos:]
-        edit.setText(new_t)
+        cursor = self.edit.textCursor()
+        cursor.insertText(token)
+        
         # Place cursor inside parentheses for functions; otherwise after token
         if cat == 'Functions':
             # Move cursor to between the parentheses
-            open_idx = new_t.find('(', pos)
-            if open_idx != -1:
-                edit.setCursorPosition(open_idx + 1)
-            else:
-                edit.setCursorPosition(pos + len(token))
-        else:
-            edit.setCursorPosition(pos + len(token))
+            cursor.movePosition(cursor.MoveOperation.Left, cursor.MoveMode.MoveAnchor, 1)
+            self.edit.setTextCursor(cursor)
 
     def text(self):
-        return self.edit.text()
+        return self.edit.toPlainText()
 
     def setText(self, t: str):
-        self.edit.setText(t)
+        self.edit.setPlainText(t)
 
     def reload_variables(self):
         # If currently on Variables, refresh list

@@ -145,20 +145,12 @@ class MainWindow(QMainWindow):
             self.load_path(Path(fn))
 
     def _get_default_directory(self):
-        # """Get the best default directory for file operations"""
-        # # Try to use the last opened file's directory
-        # if self.current_path and self.current_path.exists():
-        #     return str(self.current_path.parent)
+        """Get the best default directory for file operations"""
+        # Try to use the last opened file's directory
+        if self.current_path and self.current_path.exists():
+            return str(self.current_path.parent)
         
-        # # Try to use user's documents folder
-        # try:
-        #     documents_path = Path.home() / "Documents"
-        #     if documents_path.exists():
-        #         return str(documents_path)
-        # except Exception:
-        #     pass
-        
-        # Fallback to current working directory
+        # Use current working directory
         return os.getcwd()
 
     def load_path(self, path: Path):
