@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 from main_window import MainWindow
 

@@ -1,8 +1,9 @@
 import os
+import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QFileDialog, QTableView, QToolBar,
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QMessageBox,
@@ -23,6 +24,8 @@ class MainWindow(QMainWindow):
     def __init__(self, path: Path | None = None):
         super().__init__()
         self.setWindowTitle('SolidWorks Equations Editor')
+        icon_path = self.resource_path("assets/icon.ico")
+        self.setWindowIcon(QIcon(icon_path))
         self.resize(1200, 740)
 
         # Dark Fusion style
@@ -38,6 +41,11 @@ class MainWindow(QMainWindow):
 
         if path is not None:
             self.load_path(Path(path))
+
+    def resource_path(self, relative_path):
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(os.path.abspath("."), relative_path)
 
     def _build_ui(self):
         container = QWidget()
@@ -175,17 +183,19 @@ class MainWindow(QMainWindow):
         # - Section as combo (column 2)
         def get_sections():
             return sorted(self.cfg.get('sections', {}).keys())
+
         self.view.setItemDelegateForColumn(2, SectionComboDelegate(get_sections, self))
 
         # - Expression highlighting (column 1)
         def get_known_names():
             # Current variable names from the model
             return [e['name'] for e in self.model.equations]
+
         self.view.setItemDelegateForColumn(1, HighlightingDelegate(get_known_names, self))
-        
+
         # Connect double-click to open edit dialog
         self.view.doubleClicked.connect(self.edit_equation)
-        
+
         # Enable context menu
         self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self.show_context_menu)
@@ -283,9 +293,9 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, 'Not allowed', f'"{name}" cannot be deleted.')
             return
         if QMessageBox.question(
-            self,
-            'Confirm',
-            f'Delete section "{name}" and move its variables to Unassigned?'
+                self,
+                'Confirm',
+                f'Delete section "{name}" and move its variables to Unassigned?'
         ) != QMessageBox.StandardButton.Yes:
             return
         vars_in_sec = self.cfg['sections'].pop(name, [])
@@ -334,8 +344,10 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, 'No file open', 'Open a SolidWorks equations .txt file first.')
             return
         sec_names = list(self.cfg.get('sections', {}).keys())
+
         def get_known_names():
             return [e['name'] for e in self.model.equations]
+
         dlg = AddEditDialog(self, sections=sec_names, get_known_names_callable=get_known_names)
         if dlg.exec():
             name, expr, sec, comment = dlg.values()
@@ -349,33 +361,34 @@ class MainWindow(QMainWindow):
     def edit_equation(self, index):
         if not self.cfg or not index.isValid():
             return
-        
+
         # Only handle double-clicks on the expression column (column 1)
         if index.column() != 1:
             return
-            
+
         row = index.row()
         if row >= len(self.model.equations):
             return
-            
+
         equation = self.model.equations[row]
         name = equation['name']
         expr = equation['expr']
         section = self.model.name_to_section.get(name, 'Unassigned')
         comment = self.cfg.get('comments', {}).get(name, '')
-        
+
         sec_names = list(self.cfg.get('sections', {}).keys())
+
         def get_known_names():
             return [e['name'] for e in self.model.equations]
-        
-        dlg = AddEditDialog(self, name=name, expr=expr, sections=sec_names, 
-                           current_section=section, comment=comment, 
-                           get_known_names_callable=get_known_names)
+
+        dlg = AddEditDialog(self, name=name, expr=expr, sections=sec_names,
+                            current_section=section, comment=comment,
+                            get_known_names_callable=get_known_names)
         if dlg.exec():
             new_name, new_expr, new_sec, new_comment = dlg.values()
             if not new_name:
                 return
-                
+
             # Update the equation
             if new_name != name:
                 # Name changed - need to handle this carefully
@@ -383,9 +396,9 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, 'Error', 'A variable with that name already exists.')
                     return
                 equation['name'] = new_name
-                
+
             equation['expr'] = new_expr
-            
+
             # Update section
             if new_sec != section:
                 # Remove from old section
@@ -397,13 +410,13 @@ class MainWindow(QMainWindow):
                 if new_name not in self.cfg['sections'][new_sec]:
                     self.cfg['sections'][new_sec].append(new_name)
                 self.model.rebuild_section_map()
-            
+
             # Update comment
             if new_comment:
                 self.cfg.setdefault('comments', {})[new_name] = new_comment
             elif new_name in self.cfg.get('comments', {}):
                 del self.cfg['comments'][new_name]
-            
+
             # Update the model
             self.model.dataChanged.emit(index, index)
             self.apply_filter()
@@ -411,21 +424,21 @@ class MainWindow(QMainWindow):
     def show_context_menu(self, position):
         if not self.cfg:
             return
-            
+
         index = self.view.indexAt(position)
         if not index.isValid():
             return
-            
+
         menu = QMenu(self)
-        
+
         # Add Edit option
         edit_action = menu.addAction("Edit")
         edit_action.triggered.connect(lambda: self.edit_equation(index))
-        
+
         # Add Delete option
         delete_action = menu.addAction("Delete")
         delete_action.triggered.connect(lambda: self.delete_single_equation(index.row()))
-        
+
         menu.exec(self.view.viewport().mapToGlobal(position))
 
     def delete_single_equation(self, row):
@@ -442,7 +455,8 @@ class MainWindow(QMainWindow):
         rows = [i.row() for i in sels]
         if not rows:
             return
-        if QMessageBox.question(self, 'Confirm', f'Delete {len(rows)} selected equation(s)?') != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, 'Confirm',
+                                f'Delete {len(rows)} selected equation(s)?') != QMessageBox.StandardButton.Yes:
             return
         self.model.remove_rows(rows)
         self.apply_filter()
