@@ -74,6 +74,8 @@ class MainWindow(QMainWindow):
         del_act.triggered.connect(self.delete_selected)
         tb.addAction(del_act)
 
+
+
         # Compact filter row
         fb = QWidget()
         fbl = QHBoxLayout(fb)
@@ -130,24 +132,52 @@ class MainWindow(QMainWindow):
 
     # ------------ File ops ------------
     def open_file(self):
+        # Use a better default directory for bundled applications
+        default_dir = self._get_default_directory()
+        
         fn, _ = QFileDialog.getOpenFileName(
             self,
             'Open SolidWorks Equations',
-            os.getcwd(),
+            default_dir,
             'Text Files (*.txt);;All Files (*)'
         )
         if fn:
             self.load_path(Path(fn))
 
+    def _get_default_directory(self):
+        # """Get the best default directory for file operations"""
+        # # Try to use the last opened file's directory
+        # if self.current_path and self.current_path.exists():
+        #     return str(self.current_path.parent)
+        
+        # # Try to use user's documents folder
+        # try:
+        #     documents_path = Path.home() / "Documents"
+        #     if documents_path.exists():
+        #         return str(documents_path)
+        # except Exception:
+        #     pass
+        
+        # Fallback to current working directory
+        return os.getcwd()
+
     def load_path(self, path: Path):
         if self.fhlock:
             self.fhlock.release()
 
+        # Ensure path is absolute and normalized
+        path = path.resolve()
+        
+        # Check if file exists
+        if not path.exists():
+            QMessageBox.critical(self, 'Error', f'File does not exist: {path}')
+            return
+        
         self.current_path = path
         self.fhlock = FileHandleLock(path)
         locked = self.fhlock.acquire()
         if not self.fhlock.file:
-            QMessageBox.critical(self, 'Error', 'Failed to open file.')
+            QMessageBox.critical(self, 'Error', f'Failed to open file: {path}')
             return
 
         if locked and not self.fhlock.readonly:
@@ -213,6 +243,7 @@ class MainWindow(QMainWindow):
 
     def save_file(self):
         if not self.current_path or not self.fhlock or not self.fhlock.file:
+            QMessageBox.warning(self, 'Error', 'No file is currently open.')
             return
         if self.fhlock.readonly:
             QMessageBox.warning(
@@ -221,18 +252,29 @@ class MainWindow(QMainWindow):
                 'File is read-only (no lock). Close other apps and use Reload from the menu if present.'
             )
             return
+        
+        # Check if file path is still valid
+        if not self.current_path.exists():
+            QMessageBox.critical(self, 'Error', f'File no longer exists: {self.current_path}')
+            return
+        
         try:
             txt = serialize_equations(self.model.equations)
             self.fhlock.write_all(txt)
         except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Failed to write TXT: {e}')
+            error_msg = f'Failed to write TXT file: {e}\n\nFile: {self.current_path}\nLocked: {self.fhlock.locked}\nReadonly: {self.fhlock.readonly}'
+            QMessageBox.critical(self, 'Error', error_msg)
             return
+        
         try:
             save_cfg(cfg_path_for(self.current_path), self.cfg)
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Failed to write CFG: {e}')
             return
+        
         self.statusBar().showMessage('Saved')
+
+
 
     def closeEvent(self, event):
         event.accept()

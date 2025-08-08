@@ -8,7 +8,22 @@ from main_window import MainWindow
 
 def main():
     app = QApplication(sys.argv)
-    start_path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    
+    # Handle command line arguments
+    start_path = None
+    if len(sys.argv) > 1:
+        try:
+            start_path = Path(sys.argv[1])
+            # Resolve the path to handle relative paths
+            if start_path.exists():
+                start_path = start_path.resolve()
+            else:
+                print(f"Warning: File not found: {start_path}")
+                start_path = None
+        except Exception as e:
+            print(f"Warning: Could not parse file path: {e}")
+            start_path = None
+    
     win = MainWindow(start_path)
     win.show()
     sys.exit(app.exec())
