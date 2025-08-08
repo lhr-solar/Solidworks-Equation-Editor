@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QFileDialog, QTableView, QToolBar,
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QMessageBox,
     QLabel, QSplitter, QListWidget, QListWidgetItem, QStyleFactory,
-    QPushButton, QHeaderView, QInputDialog
+    QPushButton, QHeaderView, QInputDialog, QMenu
 )
 
 from parsing import parse_equations, serialize_equations
@@ -16,7 +16,7 @@ from file_lock import FileHandleLock
 from models import EquationModel
 from dialogs import AddEditDialog
 from styles import apply_dark_palette
-from delegates import SectionComboDelegate, ExpressionDelegate, HighlightingDelegate
+from delegates import SectionComboDelegate, HighlightingDelegate
 
 
 class MainWindow(QMainWindow):
@@ -177,12 +177,18 @@ class MainWindow(QMainWindow):
             return sorted(self.cfg.get('sections', {}).keys())
         self.view.setItemDelegateForColumn(2, SectionComboDelegate(get_sections, self))
 
-        # - Expression composite editor (column 1) with highlighter and insert combo
+        # - Expression highlighting (column 1)
         def get_known_names():
             # Current variable names from the model
             return [e['name'] for e in self.model.equations]
-        self.view.setItemDelegateForColumn(1, ExpressionDelegate(get_known_names, self))
         self.view.setItemDelegateForColumn(1, HighlightingDelegate(get_known_names, self))
+        
+        # Connect double-click to open edit dialog
+        self.view.doubleClicked.connect(self.edit_equation)
+        
+        # Enable context menu
+        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.view.customContextMenuRequested.connect(self.show_context_menu)
 
         # Column sizing: stretch Comment column to fill extra space
         self.view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -338,6 +344,95 @@ class MainWindow(QMainWindow):
             self.model.add_equation(name, expr, section=sec or 'Unassigned')
             if comment:
                 self.cfg.setdefault('comments', {})[name] = comment
+            self.apply_filter()
+
+    def edit_equation(self, index):
+        if not self.cfg or not index.isValid():
+            return
+        
+        # Only handle double-clicks on the expression column (column 1)
+        if index.column() != 1:
+            return
+            
+        row = index.row()
+        if row >= len(self.model.equations):
+            return
+            
+        equation = self.model.equations[row]
+        name = equation['name']
+        expr = equation['expr']
+        section = self.model.name_to_section.get(name, 'Unassigned')
+        comment = self.cfg.get('comments', {}).get(name, '')
+        
+        sec_names = list(self.cfg.get('sections', {}).keys())
+        def get_known_names():
+            return [e['name'] for e in self.model.equations]
+        
+        dlg = AddEditDialog(self, name=name, expr=expr, sections=sec_names, 
+                           current_section=section, comment=comment, 
+                           get_known_names_callable=get_known_names)
+        if dlg.exec():
+            new_name, new_expr, new_sec, new_comment = dlg.values()
+            if not new_name:
+                return
+                
+            # Update the equation
+            if new_name != name:
+                # Name changed - need to handle this carefully
+                if any(e['name'] == new_name for i, e in enumerate(self.model.equations) if i != row):
+                    QMessageBox.warning(self, 'Error', 'A variable with that name already exists.')
+                    return
+                equation['name'] = new_name
+                
+            equation['expr'] = new_expr
+            
+            # Update section
+            if new_sec != section:
+                # Remove from old section
+                if section in self.cfg['sections'] and name in self.cfg['sections'][section]:
+                    self.cfg['sections'][section].remove(name)
+                # Add to new section
+                if new_sec not in self.cfg['sections']:
+                    self.cfg['sections'][new_sec] = []
+                if new_name not in self.cfg['sections'][new_sec]:
+                    self.cfg['sections'][new_sec].append(new_name)
+                self.model.rebuild_section_map()
+            
+            # Update comment
+            if new_comment:
+                self.cfg.setdefault('comments', {})[new_name] = new_comment
+            elif new_name in self.cfg.get('comments', {}):
+                del self.cfg['comments'][new_name]
+            
+            # Update the model
+            self.model.dataChanged.emit(index, index)
+            self.apply_filter()
+
+    def show_context_menu(self, position):
+        if not self.cfg:
+            return
+            
+        index = self.view.indexAt(position)
+        if not index.isValid():
+            return
+            
+        menu = QMenu(self)
+        
+        # Add Edit option
+        edit_action = menu.addAction("Edit")
+        edit_action.triggered.connect(lambda: self.edit_equation(index))
+        
+        # Add Delete option
+        delete_action = menu.addAction("Delete")
+        delete_action.triggered.connect(lambda: self.delete_single_equation(index.row()))
+        
+        menu.exec(self.view.viewport().mapToGlobal(position))
+
+    def delete_single_equation(self, row):
+        if row < 0 or row >= len(self.model.equations):
+            return
+        if QMessageBox.question(self, 'Confirm', 'Delete this equation?') == QMessageBox.StandardButton.Yes:
+            self.model.remove_rows([row])
             self.apply_filter()
 
     def delete_selected(self):

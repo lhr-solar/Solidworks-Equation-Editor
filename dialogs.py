@@ -6,10 +6,11 @@ class AddEditDialog(QDialog):
     def __init__(self, parent=None, name='', expr='', sections=None, current_section='Unassigned', comment='', get_known_names_callable=lambda: ()):
         super().__init__(parent)
         self.setWindowTitle('Add / Edit Equation')
+        self.setMinimumWidth(1200)
+        self.setMinimumHeight(150)
         form = QFormLayout(self)
 
         self.name_edit = QLineEdit(name)
-        # Expression editor with variable picker + highlighter
         self.expr_editor = ExpressionEditor(get_known_names_callable, initial_text=expr)
 
         self.section_combo = QComboBox()

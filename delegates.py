@@ -1,7 +1,6 @@
 from PyQt6.QtGui import QTextDocument, QColor
 from PyQt6.QtWidgets import QStyledItemDelegate, QComboBox
 from PyQt6.QtCore import Qt, QRegularExpression, QRectF
-from editors import ExpressionEditor
 
 
 class SectionComboDelegate(QStyledItemDelegate):
@@ -26,29 +25,6 @@ class SectionComboDelegate(QStyledItemDelegate):
         if isinstance(editor, QComboBox):
             value = editor.currentText()
             model.setData(index, value, Qt.ItemDataRole.EditRole)
-
-    def updateEditorGeometry(self, editor, option, index):
-        editor.setGeometry(option.rect)
-
-
-class ExpressionDelegate(QStyledItemDelegate):
-    def __init__(self, get_known_names_callable, parent=None):
-        super().__init__(parent)
-        self.get_known_names = get_known_names_callable
-
-    def createEditor(self, parent, option, index):
-        current = index.model().data(index, Qt.ItemDataRole.EditRole) or ''
-        editor = ExpressionEditor(self.get_known_names, parent=parent, initial_text=current)
-        return editor
-
-    def setEditorData(self, editor, index):
-        text = index.model().data(index, Qt.ItemDataRole.EditRole) or ''
-        if isinstance(editor, ExpressionEditor):
-            editor.setText(text)
-
-    def setModelData(self, editor, model, index):
-        if isinstance(editor, ExpressionEditor):
-            model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
 
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect)
